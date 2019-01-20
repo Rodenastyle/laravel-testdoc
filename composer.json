@@ -1,0 +1,43 @@
+{
+  "name": "rodenastyle/laravel-testdoc",
+  "description": "Laravel Functional Tests Docs Generator",
+  "keywords": ["laravel", "docs", "generator", "functional", "tests"],
+  "license": "MIT",
+
+  "authors": [
+    {
+      "name": "Sergio Ródenas",
+      "homepage": "https://rodenastyle.com",
+      "role": "developer"
+    }
+  ],
+
+  "require": {
+    "php": "^7.0",
+    "tightenco/collect": "^5"
+  },
+
+  "require-dev": {
+    "phpunit/phpunit": "^7.0"
+  },
+
+  "autoload": {
+    "psr-4": {
+      "Rodenastyle\\TestDoc\\": "src"
+    }
+  },
+
+  "autoload-dev": {
+    "psr-4": {
+      "Rodenastyle\\TestDoc\\Test\\": "tests"
+    }
+  },
+
+  "scripts": {
+    "test": "vendor/bin/phpunit"
+  },
+
+  "config": {
+    "sort-packages": true
+  }
+}
