@@ -14,8 +14,10 @@
 
   "require": {
     "php": "^7.1",
+    "ext-json": "*",
     "illuminate/contracts": "^5.7",
-    "illuminate/support": "^5.7"
+    "illuminate/support": "^5.7",
+    "zircote/swagger-php": "^3.0"
   },
 
   "autoload": {
