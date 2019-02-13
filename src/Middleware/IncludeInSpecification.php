@@ -10,16 +10,26 @@ namespace Rodenastyle\TestDoc\Middleware;
 
 
 use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Rodenastyle\TestDoc\TestDocGenerator;
 
 class IncludeInSpecification
 {
-	public function handle($request, Closure $next)
+	private $generator;
+
+	public function __construct()
+	{
+		$this->generator = new TestDocGenerator;
+	}
+
+	public function handle(Request $request, Closure $next)
 	{
 		return $next($request);
 	}
 
-	public function terminate($request, $response)
+	public function terminate(Request $request, Response $response)
 	{
-		dd([$request, $response]);
+		$this->generator->registerEndpoint($request, $response);
 	}
 }
