@@ -24,7 +24,10 @@ class TestDocGenerator
 
 	private function loadCurrentSpecification() : void
 	{
-		$this->specification = json_decode(@file_get_contents(base_path('public/docs/specification.json')) ?: "", true);
+		$this->specification = json_decode(
+			@file_get_contents(base_path('public/docs/specification.json')) ?: "",
+			true
+		);
 	}
 
 	private function registerDefaults() : void
@@ -47,10 +50,15 @@ class TestDocGenerator
 	}
 
 	private function endpointExistsOnSpecification(Request $request):bool{
-		return isset($this->specification['paths'][$request->getMethod()]);
+		return isset($this->specification['paths']
+			[$this->getInternalRouteDeclaredFormat($request)]
+			[$this->getRouteMethodForSpecification($request)]);
 	}
 
 	private function addSpecificationEndpoint(Request $request, $response){
+		//TODO: Config
+		if(str_contains($this->getInternalRouteDeclaredFormat($request), 'internal')) return;
+
 		$this->specification['paths']
 		[$this->getInternalRouteDeclaredFormat($request)]
 		[$this->getRouteMethodForSpecification($request)] = [
@@ -59,20 +67,24 @@ class TestDocGenerator
 					'description' => ''
 				]
 			],
-			'security' => $this->getOperationSecurity(),
+			'security' => $this->getOperationSecurity($request),
 			'tags' => [
-				$this->getRouteSpecificationGroup($request)
+				ucfirst($this->getRouteSpecificationGroup($request))
 			]
 		];
 
-		$this->mergeResponseToEndpoint($request, $response);
-
-		$this->saveSpecification();
+		$this->updateSpecificationEndpoint($request, $response);
 	}
 
 	private function updateSpecificationEndpoint(Request $request, $response){
 		$this->mergeResponseToEndpoint($request, $response);
-		$this->mergeParamsToEndpoint($request, $response);
+
+		if(in_array($this->getRouteMethodForSpecification($request), ['post', 'patch', 'delete'])){
+			$this->mergeRequestBodiesToEndpoint($request, $response);
+		} else {
+			$this->mergeParamsToEndpoint($request, $response);
+		}
+
 		$this->saveSpecification();
 	}
 
@@ -94,7 +106,46 @@ class TestDocGenerator
 		];
 	}
 
-	private function mergeParamsToEndpoint(Request $request, $response){} //TODO
+	private function mergeParamsToEndpoint(Request $request, $response){
+		collect($request->query->all())->keys()->each(function($param)use($request){
+			$this->specification['paths']
+			[$this->getInternalRouteDeclaredFormat($request)]
+			[$this->getRouteMethodForSpecification($request)]
+			['parameters'][] = [
+				'in' => 'query',
+				'name' => $param,
+				'schema' => ['type' => 'string']
+			];
+		});
+	}
+
+	private function mergeRequestBodiesToEndpoint(Request $request, $response){
+		if( ! isset($this->specification['paths']
+			[$this->getInternalRouteDeclaredFormat($request)]
+			[$this->getRouteMethodForSpecification($request)]
+			['requestBody'])){
+
+			$this->specification['paths']
+			[$this->getInternalRouteDeclaredFormat($request)]
+			[$this->getRouteMethodForSpecification($request)]
+			['requestBody']['content']['application/json'] = [
+				'schema' => [
+					'type' => 'object',
+					'properties' => []
+				],
+				'required' => false
+			];
+		}
+
+		collect($request->json()->all())->keys()->each(function($bodyKey)use($request){
+			$this->specification['paths']
+			[$this->getInternalRouteDeclaredFormat($request)]
+			[$this->getRouteMethodForSpecification($request)]
+			['requestBody']['content']['application/json']['schema']['properties'][$bodyKey] = [
+				'type' => 'string'
+			];
+		});
+	}
 
 	private function getRouteMethodForSpecification(Request $request){
 		return strtolower($request->getMethod());
@@ -132,7 +183,10 @@ class TestDocGenerator
 		file_put_contents(base_path('public/docs/specification.json'), json_encode($this->specification));
 	}
 
-	private function getOperationSecurity() : array{
-		return app('auth')->guest() ? [] : ['bearerAuth' => []];
+	private function getOperationSecurity(Request $request) : array{
+		return (
+			isset($request->route()[1]['middleware']) &&
+			in_array('auth', $request->route()[1]['middleware'], true)
+		) ? ['bearerAuth' => []] : [];
 	}
 }
