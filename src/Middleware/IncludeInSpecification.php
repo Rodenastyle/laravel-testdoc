@@ -11,7 +11,6 @@ namespace Rodenastyle\TestDoc\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Rodenastyle\TestDoc\TestDocGenerator;
 
 class IncludeInSpecification
@@ -28,7 +27,7 @@ class IncludeInSpecification
 		return $next($request);
 	}
 
-	public function terminate(Request $request, Response $response)
+	public function terminate(Request $request, $response)
 	{
 		$this->generator->registerEndpoint($request, $response);
 	}

@@ -22,7 +22,13 @@ class ServiceProvider extends BaseServiceProvider
 	 */
 	public function boot(){
 		if($this->app->runningUnitTests()){
-			$this->app[Kernel::class]->pushMiddleware(IncludeInSpecification::class);
+			if($this->app instanceof \Illuminate\Foundation\Application){
+				//Laravel middleware loading
+				$this->app[Kernel::class]->pushMiddleware(IncludeInSpecification::class);
+			} else {
+				//Lumen middleware loading
+				$this->app->middleware([IncludeInSpecification::class]);
+			}
 		}
 	}
 }

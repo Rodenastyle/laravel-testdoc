@@ -9,36 +9,27 @@
 namespace Rodenastyle\TestDoc;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class TestDocGenerator
 {
 	private $specification = [];
 
-	public function registerEndpoint(Request $request, Response $response)
+	public function registerEndpoint(Request $request, $response) : void
 	{
 		$this->loadCurrentSpecification();
 		$this->registerDefaults();
 
 		$this->addOrUpdateEndpoint($request, $response);
-
-		$this->saveSpecification();
 	}
 
-	private function loadCurrentSpecification()
+	private function loadCurrentSpecification() : void
 	{
-		$this->specification = json_decode(file_get_contents(storage_path('specification.json')), true ?: []);
+		$this->specification = json_decode(@file_get_contents(base_path('public/docs/specification.json')) ?: "", true);
 	}
 
-	private function registerDefaults()
+	private function registerDefaults() : void
 	{
 		$this->specification['openapi'] = '3.0.0';
-		$this->specification['info'] = [
-			'title' => 'API Specification', //CONFIG
-			'version' => '1', //CONFIG
-		];
-
-		//CONFIG
 		$this->specification['components']['securitySchemes']['bearerAuth'] = [
 			'type' => 'http',
 			'scheme' => 'bearer',
@@ -46,74 +37,102 @@ class TestDocGenerator
 		];
 	}
 
-	private function addOrUpdateEndpoint(Request $request, Response $response): void
+	private function addOrUpdateEndpoint(Request $request, $response): void
 	{
-		$uri = parse_url($request->getRequestUri());
-
-		if($this->endpointExists($uri['path'], strtolower($request->getMethod()))){
-			//MERGE
+		if($this->endpointExistsOnSpecification($request)){
+			$this->updateSpecificationEndpoint($request, $response);
+		} else {
+			$this->addSpecificationEndpoint($request, $response);
 		}
+	}
 
-		$this->specification['paths'][$uri['path']][strtolower($request->getMethod())] = [
+	private function endpointExistsOnSpecification(Request $request):bool{
+		return isset($this->specification['paths'][$request->getMethod()]);
+	}
+
+	private function addSpecificationEndpoint(Request $request, $response){
+		$this->specification['paths']
+		[$this->getInternalRouteDeclaredFormat($request)]
+		[$this->getRouteMethodForSpecification($request)] = [
 			'responses' => [
-				$response->getStatusCode() => [
+				'200' => [
 					'description' => ''
 				]
 			],
-			'security' => $this->getOperationSecurity()
+			'security' => $this->getOperationSecurity(),
+			'tags' => [
+				$this->getRouteSpecificationGroup($request)
+			]
 		];
+
+		$this->mergeResponseToEndpoint($request, $response);
+
+		$this->saveSpecification();
 	}
 
-	private function endpointExists(String $uri, String $method) :bool {
-		return isset($this->specification['paths'][$uri][$method]);
+	private function updateSpecificationEndpoint(Request $request, $response){
+		$this->mergeResponseToEndpoint($request, $response);
+		$this->mergeParamsToEndpoint($request, $response);
+		$this->saveSpecification();
 	}
 
-	private function saveSpecification(){
-		file_put_contents(storage_path('specification.json'), json_encode($this->specification));
-	}
-
-
-	private function getOperationSecurity(){
-		return app('auth')->guest() ? [] : ['bearerAuth' => []];
-	}
-
-	private function getRequestParameters(Request $request){
-		if($request->getMethod() === 'GET') return [];
-
-		$uri = parse_url($request->getRequestUri());
-
-		return collect($uri['query'])->map(function($query, $value){
-			return [
-				'name' => $query,
-				'in' => 'query'
-			];
-		});
-	}
-
-	private function getRequestInput(Request $request){
-		if( ! $request->getMethod() === 'GET') return [];
-
-		return $input['content']['application/json']['schema']['example'] =
-			collect($request->json()->all())->toJson();
-	}
-
-	/*
-		 * $specification['paths'][$uri['path']][strtolower($request->getMethod())] = [
-			'headers' => ['Accept' => "application/json"],
-			'parameters' => $this->getRequestParameters($request),
-			'requestBody' => $this->getRequestInput($request),
-			'responses' => [
-				$response->getStatusCode() => [
-					'content' => [
-						'application/json' => [
-							'schema' => [
-								'example' => $response->getContent()
-							]
-						]
+	private function mergeResponseToEndpoint(Request $request, $response){
+		$this->specification['paths']
+		[$this->getInternalRouteDeclaredFormat($request)]
+		[$this->getRouteMethodForSpecification($request)]
+		['responses']
+		[$response->getStatusCode()] = [
+			'description' => '',
+			'content' => [
+				'application/json' => [
+					'schema' => [
+						'type' => 'string',
+						'example' => $response->getContent()
 					]
 				]
-			],
-			'security' => $this->getOperationSecurity()
+			]
 		];
-		 */
+	}
+
+	private function mergeParamsToEndpoint(Request $request, $response){} //TODO
+
+	private function getRouteMethodForSpecification(Request $request){
+		return strtolower($request->getMethod());
+	}
+
+	private function getInternalRoute(Request $request){
+		if( ! isset($request->route()[1]['as'])) return null;
+		return route($request->route()[1]['as']);
+	}
+
+	private function getInternalRouteDeclaredFormat(Request $request){
+		$uri = parse_url($this->getInternalRoute($request) ?: $request->getRequestUri());
+		return $uri['path'];
+	}
+
+	private function getRouteSpecificationGroup(Request $request){
+		return $this->getRouteSpecificationGroupByRouteName($request) ?:
+			$this->getRouteSpecificationGroupByRequestUri($request);
+	}
+
+	private function getRouteSpecificationGroupByRouteName(Request $request){
+		if( ! isset($request->route()[1]['as'])) return null;
+
+		$internalRoute = $request->route()[1]['as'];
+		$tag = explode('.', $internalRoute);
+
+		return $tag[count($tag) - 2];
+	}
+
+	private function getRouteSpecificationGroupByRequestUri(Request $request){
+		return "other";
+	}
+
+	private function saveSpecification() : void{
+		file_put_contents(base_path('public/docs/specification.json'), json_encode($this->specification));
+	}
+
+	private function getOperationSecurity() : array{
+		return app('auth')->guest() ? [] : ['bearerAuth' => []];
+	}
 }
